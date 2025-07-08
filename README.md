@@ -1,5 +1,5 @@
 # 🎮 Arma 3 Mod Manager Discord Bot
-<img src="loadmaster-log.png" width="300px" height="300px">
+<img src="loadmaster-logo.png" width="300px" height="300px">
 A powerful Discord bot designed to help Arma 3 communities manage their mod lists. The bot analyzes HTML mod lists exported from the Arma 3 Launcher and provides comprehensive insights about mods, compatibility, and changes.
 
 ## ✨ Features
