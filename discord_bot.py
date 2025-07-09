@@ -88,17 +88,16 @@ class ModCommands(commands.Cog):
     
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
-        """Handle file uploads and commands"""
+        """Handle file uploads and commands, but prevent duplicate command processing."""
         if message.author.bot:
             return
-        
-        # Check for file attachments
+        # If a file upload is handled, do NOT process commands
         if message.attachments:
             for attachment in message.attachments:
                 if attachment.filename.lower().endswith('.html'):
                     await self.handle_html_upload(message, attachment)
-                    return
-        
+                    return  # Prevents double-processing
+        # Only process commands if not handled above
         await self.bot.process_commands(message)
     
     async def handle_html_upload(self, message: discord.Message, attachment: discord.Attachment):
