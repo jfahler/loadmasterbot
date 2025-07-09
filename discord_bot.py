@@ -78,7 +78,7 @@ class ModCommands(commands.Cog):
         embed.add_field(
             name="📋 Commands",
             value="`!modlist` - Show this help\n"
-                  "`!help` - Show all commands",
+                  "`!bothelp` - Show all commands",
             inline=False
         )
         
@@ -223,8 +223,8 @@ class ModCommands(commands.Cog):
             except:
                 pass
     
-    @commands.command(name='help')
-    async def help_command(self, ctx: commands.Context):
+    @commands.command(name='bothelp', aliases=['bh'])
+    async def bothelp_command(self, ctx: commands.Context):
         """Show help information"""
         embed = discord.Embed(
             title="🎮 Arma 3 Mod Manager - Help",
@@ -241,7 +241,8 @@ class ModCommands(commands.Cog):
         embed.add_field(
             name="🔧 Commands",
             value="`!modlist` - Show mod manager help\n"
-                  "`!help` - Show this help message",
+                  "`!bothelp` - Show this help message\n"
+                  "`!help` - Show Discord.py help",
             inline=False
         )
         
@@ -258,6 +259,43 @@ class ModCommands(commands.Cog):
         embed.set_footer(text="Made for Arma 3 communities")
         
         await ctx.send(embed=embed)
+
+    @commands.command(name='modsize_debug')
+    async def modsize_debug(self, ctx: commands.Context):
+        """Show a breakdown of mod sizes for the last uploaded list."""
+        user_id = str(ctx.author.id)
+        guild_id = str(ctx.guild.id)
+        # Try to get the last analysis for this user/guild
+        if hasattr(self.bot.analyzer, 'get_last_analysis'):
+            last_analysis = self.bot.analyzer.get_last_analysis(user_id, guild_id)
+        else:
+            last_analysis = None
+        if not last_analysis:
+            await ctx.send("No mod list analysis found for you yet.")
+            return
+
+        mod_info = last_analysis['mod_info']
+        lines = []
+        total_size = 0
+        known_count = 0
+        unknown_count = 0
+        for mod in mod_info:
+            size = mod.get('size_gb')
+            if size is not None:
+                known_count += 1
+                total_size += size
+                lines.append(f"{mod['name']} ({mod['id']}): {size:.2f} GB")
+            else:
+                unknown_count += 1
+                lines.append(f"{mod['name']} ({mod['id']}): Unknown size")
+
+        summary = (
+            f"**Total Mods:** {len(mod_info)}\n"
+            f"**Known Sizes:** {known_count}\n"
+            f"**Unknown Sizes:** {unknown_count}\n"
+            f"**Total Known Size:** {total_size:.2f} GB"
+        )
+        await ctx.send(summary + "\n\n" + "\n".join(lines[:30]) + ("\n...and more." if len(lines) > 30 else ""))
 
 class ModListView(discord.ui.View):
     def __init__(self, list_id: str, total_mods: int):

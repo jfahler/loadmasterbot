@@ -83,9 +83,12 @@ class ModAnalyzer:
         
         # Cache mod information
         for mod_id, info in mod_info.items():
-            self.database.cache_mod_info(mod_id, info['name'], info.get('size_gb'))
-            if info.get('size_gb'):
-                self.database.save_mod_size(mod_id, info['size_gb'])
+            size_gb = info.get('size_gb')
+            if size_gb is not None:
+                self.database.cache_mod_info(mod_id, info['name'], size_gb)
+                self.database.save_mod_size(mod_id, size_gb)
+            else:
+                self.database.cache_mod_info(mod_id, info['name'], 0.0)
         
         return {
             'mod_ids': mod_ids,
@@ -152,4 +155,32 @@ class ModAnalyzer:
             'displayed_count': len(display_mods),
             'remaining_count': len(remaining_mods),
             'all_mods': mod_list
+        } 
+
+    def get_last_analysis(self, user_id: str, server_id: str):
+        """Retrieve the last analysis for a user in a server."""
+        last_upload = self.database.get_last_upload(user_id, server_id)
+        if not last_upload:
+            return None
+        mod_ids = last_upload['mod_list']
+        # Synchronously get mod info for debug (assume this is for debug, not production)
+        # In production, this should be async, but for debug command, we can use cached info
+        mod_info = {}
+        for mod_id in mod_ids:
+            cached = self.database.get_cached_mod_info(mod_id)
+            if cached:
+                mod_info[mod_id] = {
+                    'id': mod_id,
+                    'name': cached['mod_name'],
+                    'size_gb': cached['mod_size']
+                }
+            else:
+                mod_info[mod_id] = {
+                    'id': mod_id,
+                    'name': f"Mod {mod_id}",
+                    'size_gb': None
+                }
+        return {
+            'mod_info': list(mod_info.values()),
+            'total_mods': len(mod_ids)
         } 
