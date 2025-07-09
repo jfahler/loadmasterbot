@@ -14,32 +14,60 @@ STEAM_API_BASE_URL = "https://api.steampowered.com/ISteamRemoteStorage/GetPublis
 # CDLC and Compat Mods Configuration
 CDLC_COMPAT_MODS = {
     "GM": {
-        "name": "Global Mobilization",
-        "required_mods": [123456789],  # Example mod IDs
-        "compat_mod": 987654321,
-        "compat_name": "GM Compat",
-        "steam_url": "https://steamcommunity.com/sharedfiles/filedetails/?id=987654321"
+        "name": "Global Mobilization - Cold War Germany",
+        "required_mods": [1808728802],  # Global Mobilization CDLC mod ID
+        "compat_mod": 1776428269,
+        "compat_name": "Global Mobilization - Cold War Germany Compatibility Data",
+        "steam_url": "https://steamcommunity.com/sharedfiles/filedetails/?id=1776428269",
+        "cdlc_url": "https://steamcommunity.com/sharedfiles/filedetails/?id=1776428269"
     },
     "SOG": {
         "name": "S.O.G. Prairie Fire",
-        "required_mods": [234567890],
-        "compat_mod": 876543210,
-        "compat_name": "SOG Compat",
-        "steam_url": "https://steamcommunity.com/sharedfiles/filedetails/?id=876543210"
+        "required_mods": [1224892496],  # S.O.G. Prairie Fire CDLC mod ID
+        "compat_mod": 2477276806,
+        "compat_name": "S.O.G. Prairie Fire Compatibility Data",
+        "steam_url": "https://steamcommunity.com/sharedfiles/filedetails/?id=2477276806",
+        "cdlc_url": "https://steamcommunity.com/sharedfiles/filedetails/?id=2477276806"
     },
     "CSLA": {
         "name": "CSLA Iron Curtain",
-        "required_mods": [345678901],
-        "compat_mod": 765432109,
-        "compat_name": "CSLA Compat",
-        "steam_url": "https://steamcommunity.com/sharedfiles/filedetails/?id=765432109"
+        "required_mods": [1294443683],  # CSLA Iron Curtain CDLC mod ID
+        "compat_mod": 2503886780,
+        "compat_name": "CSLA Iron Curtain Compatibility Data",
+        "steam_url": "https://steamcommunity.com/sharedfiles/filedetails/?id=2503886780",
+        "cdlc_url": "https://steamcommunity.com/sharedfiles/filedetails/?id=2503886780"
     },
     "SPE": {
         "name": "Spearhead 1944",
-        "required_mods": [456789012],
-        "compat_mod": 654321098,
-        "compat_name": "SPE Compat",
-        "steam_url": "https://steamcommunity.com/sharedfiles/filedetails/?id=654321098"
+        "required_mods": [1873244913],  # Spearhead 1944 CDLC mod ID
+        "compat_mod": 2991828484,
+        "compat_name": "Spearhead 1944 Compatibility Data",
+        "steam_url": "https://steamcommunity.com/sharedfiles/filedetails/?id=2991828484",
+        "cdlc_url": "https://steamcommunity.com/sharedfiles/filedetails/?id=2991828484"
+    },
+    "WS": {
+        "name": "Western Sahara",
+        "required_mods": [1681170],  # Western Sahara CDLC mod ID
+        "compat_mod": 2636962953,
+        "compat_name": "Western Sahara Compatibility Data",
+        "steam_url": "https://steamcommunity.com/sharedfiles/filedetails/?id=2636962953",
+        "cdlc_url": "https://steamcommunity.com/sharedfiles/filedetails/?id=2636962953"
+    },
+    "RF": {
+        "name": "Reaction Forces",
+        "required_mods": [2017047000],  # Reaction Forces CDLC mod ID
+        "compat_mod": 3150497912,
+        "compat_name": "Reaction Forces Compatibility Data",
+        "steam_url": "https://steamcommunity.com/sharedfiles/filedetails/?id=3150497912",
+        "cdlc_url": "https://steamcommunity.com/sharedfiles/filedetails/?id=3150497912"
+    },
+    "EF": {
+        "name": "Expeditionary Forces",
+        "required_mods": [2017047001],  # Expeditionary Forces CDLC mod ID
+        "compat_mod": 3348605126,
+        "compat_name": "Expeditionary Forces Compatibility Data",
+        "steam_url": "https://steamcommunity.com/sharedfiles/filedetails/?id=3348605126",
+        "cdlc_url": "https://steamcommunity.com/sharedfiles/filedetails/?id=3348605126"
     }
 }
 

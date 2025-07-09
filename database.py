@@ -46,7 +46,7 @@ class ModDatabase:
             
             conn.commit()
     
-    def cache_mod_info(self, mod_id: str, mod_name: str, mod_size: float = None):
+    def cache_mod_info(self, mod_id: str, mod_name: str, mod_size: Optional[float] = None):
         """Cache mod information"""
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()

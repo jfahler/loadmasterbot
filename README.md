@@ -1,18 +1,28 @@
 # 🎮 Arma 3 Mod Manager Discord Bot
+
+[![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Last Commit](https://img.shields.io/github/last-commit/yourusername/loadmasterbot)](https://github.com/yourusername/loadmasterbot/commits/main)
+[![Discord.py](https://img.shields.io/badge/Discord.py-2.0+-blue.svg)](https://discordpy.readthedocs.io/)
+[![Arma 3](https://img.shields.io/badge/Arma%203-Mod%20Manager-green.svg)](https://arma3.com/)
+
 <img src="loadmaster-logo.png" width="300px" height="300px">
-A powerful Discord bot designed to help Arma 3 communities manage their mod lists. The bot analyzes HTML mod lists exported from the Arma 3 Launcher and provides comprehensive insights about mods, compatibility, and changes.
+
+A powerful Discord bot designed to help Arma 3 communities manage their mod lists. The bot analyzes HTML mod lists exported from the Arma 3 Launcher and provides comprehensive insights about mods, CDLC requirements, and changes.
 
 ## ✨ Features
 
 ### 📋 Mod List Analysis
 - **Automatic Mod Name Lookup**: Extracts mod IDs from HTML and fetches names from Steam Workshop
-- **Size Estimation**: Estimates total download size and individual mod sizes
+- **Size Estimation**: Estimates total download size and individual mod sizes with smart caching
+- **Workshop Requirements**: Checks if all required workshop dependencies are included
 - **Smart Caching**: Caches mod information to reduce API calls and improve performance
 
 ### 🔧 CDLC Compatibility Checking
-- **Missing Compat Detection**: Automatically detects when CDLC mods are loaded but compatibility mods are missing
-- **Direct Steam Links**: Provides direct links to download missing compatibility mods
-- **Supported CDLC**: Global Mobilization, S.O.G. Prairie Fire, CSLA Iron Curtain, Spearhead 1944
+- **CDLC Detection**: Automatically detects when CDLC mods are present in the mod list
+- **Potential CDLC Requirements**: Identifies mods that may require CDLC based on names, descriptions, and requirements
+- **Direct Steam Links**: Provides direct links to compatibility mods that work without purchasing CDLC
+- **Supported CDLC**: Global Mobilization, S.O.G. Prairie Fire, CSLA Iron Curtain, Spearhead 1944, Western Sahara, Reaction Forces, Expeditionary Forces
 
 ### 📈 Change Tracking
 - **Mod List Comparison**: Compares current upload with previous uploads
@@ -21,8 +31,9 @@ A powerful Discord bot designed to help Arma 3 communities manage their mod list
 
 ### 📱 Mobile-Friendly Interface
 - **Responsive Design**: Works great on both desktop and mobile Discord
-- **Interactive Buttons**: Easy-to-use buttons for viewing complete mod lists
-- **Categorized View**: Organizes mods by type (maps, weapons, vehicles, etc.)
+- **Interactive Buttons**: Easy-to-use buttons for viewing complete mod lists and downloading files
+- **Clean Layout**: Well-organized sections with visual separators for better readability
+- **Limited Display**: Shows top 10 mods with option to view complete list privately
 
 ## 🚀 Quick Start
 
@@ -81,14 +92,37 @@ A powerful Discord bot designed to help Arma 3 communities manage their mod list
    - The bot will automatically process it
 
 3. **View Results**
-   - The bot will show a comprehensive analysis
-   - Use the buttons to view complete mod lists or categories
-   - Check for any missing compatibility mods
+   - The bot will show a comprehensive analysis with clear sections
+   - Use "Show All Mods" button to get the complete list sent to your private messages
+   - Use "Download" button to get the original HTML file
+   - Check for any CDLC requirements or workshop dependencies
 
 ### Commands
 
-- `!modlist` - Show help information
-- `!help` - Show general help
+**Slash Commands (Recommended):**
+- `/modlist` - Show help information
+- `/bothelp` - Show detailed bot help
+- `/debug` - Debug bot functionality (modsize, dlc, changes)
+
+**Legacy Commands (Deprecated):**
+- `!modlist` - Show help information (use `/modlist` instead)
+- `!bothelp` - Show detailed bot help (use `/bothelp` instead)
+- `!help` - Show general Discord.py help
+
+### 🧪 Testing the Bot
+
+To test the bot locally, you can use the provided example mod list HTML files:
+
+- **[modTestList1.html](modTestList1.html)** - Test mod list with various mods and CDLC requirements
+- **[modTestList2.html](modTestList2.html)** - Alternative test mod list for comparison testing
+
+Simply download these files and upload them to your Discord channel to see the bot in action. These files contain real mod IDs from the Steam Workshop and will demonstrate all the bot's features including:
+
+- Mod name and size detection
+- CDLC requirement checking
+- Workshop dependency analysis
+- Change tracking (when uploading both files)
+- Interactive button functionality
 
 ## 🔧 Configuration
 
@@ -99,11 +133,12 @@ Edit `config.py` to add or modify CDLC compatibility mods:
 ```python
 CDLC_COMPAT_MODS = {
     "GM": {
-        "name": "Global Mobilization",
-        "required_mods": [123456789],  # CDLC mod IDs
-        "compat_mod": 987654321,       # Compatibility mod ID
-        "compat_name": "GM Compat",
-        "steam_url": "https://steamcommunity.com/sharedfiles/filedetails/?id=987654321"
+        "name": "Global Mobilization - Cold War Germany",
+        "required_mods": [1808728802],  # CDLC mod IDs
+        "compat_mod": 1776428269,       # Compatibility mod ID
+        "compat_name": "Global Mobilization - Cold War Germany Compatibility Data",
+        "steam_url": "https://steamcommunity.com/sharedfiles/filedetails/?id=1776428269",
+        "cdlc_url": "https://steamcommunity.com/sharedfiles/filedetails/?id=1776428269"
     },
     # Add more CDLC here...
 }
@@ -125,38 +160,43 @@ KNOWN_MOD_SIZES = {
 
 ### Core Components
 
-- **`discord_bot.py`**: Main bot implementation with Discord.py
+- **`discord_bot.py`**: Main bot implementation with Discord.py and interactive UI
 - **`steam_workshop.py`**: Steam Workshop API integration and HTML parsing
-- **`mod_analyzer.py`**: Mod analysis, compatibility checking, and categorization
+- **`mod_analyzer.py`**: Mod analysis, CDLC detection, and workshop requirements checking
 - **`database.py`**: SQLite database for caching and user data
 - **`config.py`**: Configuration and constants
 
 ### Data Flow
 
 1. **HTML Upload** → Parse mod IDs from HTML
-2. **Steam API** → Fetch mod names and sizes
-3. **Analysis** → Check compatibility, compare with previous uploads
+2. **Steam API** → Fetch mod names, sizes, and required items
+3. **Analysis** → Check CDLC requirements, workshop dependencies, compare with previous uploads
 4. **Database** → Cache results and store user data
 5. **Discord** → Send formatted results with interactive buttons
 
 ## 🔍 Features in Detail
 
 ### Mod List Display
-- Shows top mods by size with pagination
-- Mobile-friendly buttons for viewing complete lists
-- Categorized view (maps, weapons, vehicles, etc.)
-- Direct links to Steam Workshop pages
+- Shows top 10 mods by size with clean formatting
+- "Show All Mods" button sends complete list to user's private messages
+- "Download" button provides original HTML file
+- Sorted by size (largest first) for better organization
 
-### Compatibility Checking
-- Automatically detects loaded CDLC mods
-- Checks for required compatibility mods
-- Provides direct download links for missing mods
-- Color-coded warnings (orange for issues, green for success)
+### CDLC Compatibility Checking
+- **Detected CDLC**: Shows when actual CDLC mods are present with compatibility mod links
+- **Potential Requirements**: Identifies mods that may require CDLC with helpful warnings
+- **Direct Links**: Provides links to compatibility mods that work without purchasing CDLC
+- **Clear Messaging**: User-friendly warnings about CDLC activation requirements
+
+### Workshop Requirements
+- **Dependency Checking**: Verifies all required workshop items are included
+- **Missing Items**: Shows specific missing dependencies with mod names
+- **Status Indicators**: Green checkmark for success, red warning for issues
 
 ### Size Estimation
 - Uses cached mod sizes when available
 - Estimates unknown mods based on average size
-- Shows breakdown of known vs unknown sizes
+- Shows total estimated download size
 - Updates cache with new size information
 
 ### Change Tracking
@@ -236,6 +276,10 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 3. **Database errors**
    - Ensure write permissions in bot directory
    - Check if SQLite is properly installed
+
+4. **Private message issues**
+   - Users need to allow private messages from server members
+   - Check Discord privacy settings
 
 ### Logs
 
