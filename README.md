@@ -156,6 +156,26 @@ KNOWN_MOD_SIZES = {
 }
 ```
 
+### Authorized Users
+
+Restrict who can upload mod lists by adding Discord User IDs to the authorized users list:
+
+```python
+# Allow all users (default)
+AUTHORIZED_USERS = []
+
+# Restrict to specific users
+AUTHORIZED_USERS = ["123456789", "987654321"]
+```
+
+To find a Discord User ID:
+1. Enable Developer Mode in Discord (User Settings → Advanced → Developer Mode)
+2. Right-click on the user's name
+3. Select "Copy ID"
+4. Add the ID to the `AUTHORIZED_USERS` list in `config.py`
+
+**Note**: Leave the list empty `[]` to allow all users to upload mod lists.
+
 ## 🏗️ Architecture
 
 ### Core Components

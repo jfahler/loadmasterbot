@@ -7,6 +7,11 @@ load_dotenv()
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
 BOT_PREFIX = '!'
 
+# Authorized Users Configuration
+# Add Discord User IDs (as strings) of users who are allowed to upload mod lists
+# Leave empty list [] to allow all users, or add specific user IDs like ["123456789", "987654321"]
+AUTHORIZED_USERS = []
+
 # Steam Workshop Configuration
 STEAM_WORKSHOP_BASE_URL = "https://steamcommunity.com/sharedfiles/filedetails/?id="
 STEAM_API_BASE_URL = "https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/v1/"

@@ -8,7 +8,7 @@ import os
 from typing import Optional
 import time
 
-from config import DISCORD_TOKEN, BOT_PREFIX, MAX_MODS_PER_PAGE, MESSAGE_DELETE_DELAY
+from config import DISCORD_TOKEN, BOT_PREFIX, MAX_MODS_PER_PAGE, MESSAGE_DELETE_DELAY, AUTHORIZED_USERS
 from database import ModDatabase
 from steam_workshop import SteamWorkshopAPI
 from mod_analyzer import ModAnalyzer
@@ -117,6 +117,22 @@ class ModCommands(commands.Cog):
     
     async def handle_html_upload(self, message: discord.Message, attachment: discord.Attachment):
         """Handle HTML file upload"""
+        # Check if user is authorized to upload mod lists
+        user_id = str(message.author.id)
+        if AUTHORIZED_USERS and user_id not in AUTHORIZED_USERS:
+            error_embed = discord.Embed(
+                title="❌ Access Denied",
+                description="You are not authorized to upload mod lists to this bot.",
+                color=0xff0000
+            )
+            error_embed.add_field(
+                name="ℹ️ How to get access",
+                value="Contact the bot administrator to be added to the authorized users list.",
+                inline=False
+            )
+            await message.channel.send(embed=error_embed)
+            return
+        
         loading_embed = discord.Embed(
             title="🔄 Processing Mod List",
             description="Downloading and analyzing your mod list...",
@@ -128,8 +144,8 @@ class ModCommands(commands.Cog):
             html_text = html_content.decode('utf-8')
             analysis = await self.bot.analyzer.analyze_mod_list(
                 html_text, 
-                str(message.author.id), 
-                str(message.guild.id)
+                user_id, 
+                str(message.guild.id) if message.guild else "DM"
             )
             analysis['modlist_attachment_url'] = attachment.url
 
@@ -180,7 +196,7 @@ class ModCommands(commands.Cog):
             )
             await loading_msg.edit(embed=error_embed)
 
-    async def send_mod_analysis(self, channel, analysis: dict, user: discord.Member):
+    async def send_mod_analysis(self, channel, analysis: dict, user: discord.User | discord.Member):
         """Send comprehensive mod analysis"""
         # Create main embed with new title format
         embed = discord.Embed(
@@ -478,7 +494,7 @@ class ModCommands(commands.Cog):
         debug_type="Type of debug: modsize, dlc, or changes",
         mod_id="Mod ID for DLC debug (required for dlc type)"
     )
-    async def debug_slash(self, interaction: discord.Interaction, debug_type: str, mod_id: str = None):
+    async def debug_slash(self, interaction: discord.Interaction, debug_type: str, mod_id: str | None = None):
         """Unified debug command for all debug functionality"""
         await interaction.response.defer(ephemeral=True)
         
@@ -655,7 +671,7 @@ class ModCommands(commands.Cog):
         await ctx.send("⚠️ This command is deprecated. Please use `/debug modsize` instead.")
     
     @commands.command(name='dlc_debug')
-    async def dlc_debug_legacy(self, ctx: commands.Context, mod_id: str = None):
+    async def dlc_debug_legacy(self, ctx: commands.Context, mod_id: str | None = None):
         """Legacy command - use /debug dlc <mod_id> instead"""
         if mod_id:
             await ctx.send(f"⚠️ This command is deprecated. Please use `/debug dlc {mod_id}` instead.")
@@ -681,7 +697,12 @@ class ModListView(discord.ui.View):
         # Respond immediately to prevent interaction timeout
         await interaction.response.defer(ephemeral=True)
         
+        # Cast to ArmaModBot to access active_mod_lists
         bot = interaction.client
+        if not isinstance(bot, ArmaModBot):
+            await interaction.followup.send("❌ Bot configuration error.", ephemeral=True)
+            return
+            
         if self.list_id not in bot.active_mod_lists:
             await interaction.followup.send("❌ Mod list has expired. Please upload again.", ephemeral=True)
             return
@@ -726,7 +747,12 @@ class ModListView(discord.ui.View):
     @discord.ui.button(label="⬇️ DOWNLOAD", style=discord.ButtonStyle.secondary, emoji="📥")
     async def download_modlist(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Download the original modlist HTML file"""
+        # Cast to ArmaModBot to access active_mod_lists
         bot = interaction.client
+        if not isinstance(bot, ArmaModBot):
+            await interaction.response.send_message("❌ Bot configuration error.", ephemeral=True)
+            return
+            
         if self.list_id not in bot.active_mod_lists:
             await interaction.response.send_message("❌ Mod list has expired. Please upload again.", ephemeral=True)
             return
@@ -742,6 +768,8 @@ async def main():
     bot = ArmaModBot()
     
     try:
+        if not DISCORD_TOKEN:
+            raise ValueError("DISCORD_TOKEN environment variable is not set")
         await bot.start(DISCORD_TOKEN)
     except KeyboardInterrupt:
         print("Bot stopped by user")

@@ -1,6 +1,7 @@
-# Discord Bot Token
-# Get this from https://discord.com/developers/applications
+# Discord Bot Configuration
 DISCORD_TOKEN=your_discord_bot_token_here
 
-# Optional: Custom bot prefix (default is !)
-BOT_PREFIX=! 
+# Optional: Add Discord User IDs of authorized users who can upload mod lists
+# Leave empty to allow all users, or add specific user IDs like:
+# AUTHORIZED_USERS=["123456789", "987654321"]
+# To find your Discord User ID: Enable Developer Mode in Discord, right-click your name, and select "Copy ID" 
