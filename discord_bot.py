@@ -52,6 +52,10 @@ class ArmaModBot(commands.Bot):
         
         # Set bot status
         await self.change_presence(activity=discord.Game(name="Arma 3 Mod Manager"))
+        
+        # Railway-specific: Log environment info
+        print(f"Running on Railway: {os.getenv('RAILWAY_ENVIRONMENT', 'Unknown')}")
+        print(f"Container ID: {os.getenv('RAILWAY_CONTAINER_ID', 'Unknown')}")
     
     async def close(self):
         """Cleanup when bot shuts down"""
@@ -109,6 +113,8 @@ class ModCommands(commands.Cog):
         if message.attachments:
             for attachment in message.attachments:
                 if attachment.filename.lower().endswith('.html'):
+                    # Add a small delay to ensure Discord interaction context is ready
+                    await asyncio.sleep(0.1)
                     await self.handle_html_upload(message, attachment)
                     return  # Prevents any further processing
         
@@ -117,6 +123,8 @@ class ModCommands(commands.Cog):
     
     async def handle_html_upload(self, message: discord.Message, attachment: discord.Attachment):
         """Handle HTML file upload"""
+        print(f"Processing HTML upload from {message.author.name} ({message.author.id})")
+        
         # Check if user is authorized to upload mod lists
         user_id = str(message.author.id)
         if AUTHORIZED_USERS and user_id not in AUTHORIZED_USERS:
@@ -140,13 +148,22 @@ class ModCommands(commands.Cog):
         )
         loading_msg = await message.channel.send(embed=loading_embed)
         try:
+            print(f"Reading HTML file: {attachment.filename}")
             html_content = await attachment.read()
             html_text = html_content.decode('utf-8')
-            analysis = await self.bot.analyzer.analyze_mod_list(
-                html_text, 
-                user_id, 
-                str(message.guild.id) if message.guild else "DM"
+            print(f"HTML file read successfully, size: {len(html_text)} characters")
+            
+            print("Starting mod list analysis...")
+            # Add timeout to prevent hanging
+            analysis = await asyncio.wait_for(
+                self.bot.analyzer.analyze_mod_list(
+                    html_text, 
+                    user_id, 
+                    str(message.guild.id) if message.guild else "DM"
+                ),
+                timeout=60.0  # 60 second timeout
             )
+            print("Mod list analysis completed successfully")
             analysis['modlist_attachment_url'] = attachment.url
 
             # Delete previous mod list message in this channel
@@ -188,7 +205,20 @@ class ModCommands(commands.Cog):
                 except Exception as e:
                     # Log error but don't fail the main operation
                     print(f"Failed to send deletion notification: {e}")
+        except asyncio.TimeoutError:
+            print("Mod list analysis timed out after 60 seconds")
+            error_embed = discord.Embed(
+                title="⏰ Processing Timeout",
+                description="The mod list analysis took too long and timed out. This might be due to:\n"
+                           "• Large number of mods\n"
+                           "• Steam Workshop API being slow\n"
+                           "• Network connectivity issues\n\n"
+                           "Please try again in a few minutes.",
+                color=0xff6600
+            )
+            await loading_msg.edit(embed=error_embed)
         except Exception as e:
+            print(f"Error processing mod list: {e}")
             error_embed = discord.Embed(
                 title="❌ Error Processing Mod List",
                 description=f"An error occurred while processing your mod list:\n```{str(e)}```",
