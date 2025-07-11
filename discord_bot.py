@@ -32,6 +32,9 @@ class ArmaModBot(commands.Bot):
         # Track last mod list message per channel
         self.last_modlist_message = {}
         self.last_modlist_analysis = {}
+        
+        # Start cleanup task for expired mod lists
+        self.cleanup_task = None
     
     async def setup_hook(self):
         """Setup hook for bot initialization"""
@@ -44,6 +47,9 @@ class ArmaModBot(commands.Bot):
             print(f"Synced {len(synced)} command(s)")
         except Exception as e:
             print(f"Failed to sync commands: {e}")
+        
+        # Start cleanup task for expired mod lists
+        self.cleanup_task = asyncio.create_task(self.cleanup_expired_mod_lists())
     
     async def on_ready(self):
         """Called when bot is ready"""
@@ -57,8 +63,41 @@ class ArmaModBot(commands.Bot):
         print(f"Running on Railway: {os.getenv('RAILWAY_ENVIRONMENT', 'Unknown')}")
         print(f"Container ID: {os.getenv('RAILWAY_CONTAINER_ID', 'Unknown')}")
     
+    async def cleanup_expired_mod_lists(self):
+        """Cleanup task to remove expired mod lists from memory"""
+        while not self.is_closed():
+            try:
+                current_time = time.time()
+                expired_keys = []
+                
+                for list_id, data in self.active_mod_lists.items():
+                    # Remove mod lists older than 20 minutes (1200 seconds)
+                    if current_time - data['timestamp'] > 1200:
+                        expired_keys.append(list_id)
+                
+                for key in expired_keys:
+                    del self.active_mod_lists[key]
+                
+                if expired_keys:
+                    print(f"Cleaned up {len(expired_keys)} expired mod lists")
+                
+                # Run cleanup every 5 minutes
+                await asyncio.sleep(300)
+                
+            except Exception as e:
+                print(f"Error in cleanup task: {e}")
+                await asyncio.sleep(60)  # Wait 1 minute before retrying
+    
     async def close(self):
         """Cleanup when bot shuts down"""
+        # Cancel cleanup task
+        if self.cleanup_task:
+            self.cleanup_task.cancel()
+            try:
+                await self.cleanup_task
+            except asyncio.CancelledError:
+                pass
+        
         await self.steam_api.close_session()
         await super().close()
 
@@ -443,7 +482,9 @@ class ModCommands(commands.Cog):
         self.bot.active_mod_lists[list_id] = {
             'mods': mod_display['all_mods'],
             'timestamp': time.time(),
-            'download_url': analysis.get('modlist_attachment_url')
+            'download_url': analysis.get('modlist_attachment_url'),
+            'user_id': user.id,
+            'guild_id': channel.guild.id if channel.guild else None
         }
 
         # Create view with buttons
@@ -500,7 +541,8 @@ class ModCommands(commands.Cog):
             value="**Slash Commands:**\n"
                   "`/modlist` - Show basic help\n"
                   "`/bothelp` - Show detailed help (this command)\n"
-                  "`/debug` - Debug bot functionality\n\n"
+                  "`/debug` - Debug bot functionality\n"
+                  "`/regen` - Regenerate buttons for recent mod list\n\n"
                   "**Legacy Commands:**\n"
                   "`!modlist` - Show basic help\n"
                   "`!bothelp` - Show detailed help\n"
@@ -515,8 +557,10 @@ class ModCommands(commands.Cog):
             value="**After uploading a mod list:**\n"
                   "• **Show All Mods** button - Get complete list in private message\n"
                   "• **Download** button - Download original HTML file\n"
+                  "• **LMB Alpha 0.3** button - View GitHub repository\n"
                   "• **Change tracking** - See what changed from last upload\n"
-                  "• **CDLC warnings** - Get links to compatibility mods",
+                  "• **CDLC warnings** - Get links to compatibility mods\n\n"
+                  "**Button Timeout:** Buttons work for 15 minutes. Use `/regen` to get fresh buttons.",
             inline=False
         )
         
@@ -699,6 +743,59 @@ class ModCommands(commands.Cog):
         
         await interaction.followup.send(embed=embed, ephemeral=True)
     
+    @app_commands.command(name="regen", description="Regenerate buttons for your recent mod list")
+    async def regen_buttons(self, interaction: discord.Interaction):
+        """Regenerate buttons for a recent mod list"""
+        await interaction.response.defer(ephemeral=True)
+        
+        user_id = interaction.user.id
+        guild_id = interaction.guild.id if interaction.guild else None
+        
+        # Find the most recent mod list for this user
+        most_recent = None
+        most_recent_time = 0
+        
+        for list_id, data in self.bot.active_mod_lists.items():
+            if (data.get('user_id') == user_id and 
+                data.get('guild_id') == guild_id and
+                data['timestamp'] > most_recent_time):
+                most_recent = (list_id, data)
+                most_recent_time = data['timestamp']
+        
+        if not most_recent:
+            await interaction.followup.send("❌ No recent mod list found. Please upload a new mod list first.", ephemeral=True)
+            return
+        
+        list_id, data = most_recent
+        
+        # Check if the mod list is too old (more than 24 hours)
+        if time.time() - data['timestamp'] > 86400:  # 24 hours
+            await interaction.followup.send("❌ Your mod list is too old (more than 24 hours). Please upload a new one.", ephemeral=True)
+            return
+        
+        # Create new view with fresh buttons
+        view = ModListView(list_id, len(data['mods']))
+        
+        embed = discord.Embed(
+            title="🔄 Fresh Buttons Generated",
+            description="Here are fresh buttons for your recent mod list:",
+            color=0x00ff00
+        )
+        embed.add_field(
+            name="📋 Available Actions",
+            value="• **Show All Mods** - Get complete list in private message\n"
+                  "• **Download** - Download original HTML file\n"
+                  "• **LMB Alpha 0.3** - View GitHub repository",
+            inline=False
+        )
+        embed.add_field(
+            name="⏰ Button Lifetime",
+            value="These buttons will work for the next 15 minutes.",
+            inline=False
+        )
+        
+        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+    
     # Legacy commands for backward compatibility
     @commands.command(name='modlist', aliases=['ml', 'mods'])
     async def modlist_legacy(self, ctx: commands.Context):
@@ -730,7 +827,7 @@ class ModCommands(commands.Cog):
 
 class ModListView(discord.ui.View):
     def __init__(self, list_id: str, total_mods: int):
-        super().__init__(timeout=300)  # 5 minute timeout
+        super().__init__(timeout=900)  # 15 minute timeout (Discord's limit)
         self.list_id = list_id
         self.total_mods = total_mods
         self.current_page = 0
@@ -740,6 +837,10 @@ class ModListView(discord.ui.View):
     async def show_all_mods(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Show all mods in a private message to the user"""
         try:
+            # Check if interaction is already responded to
+            if interaction.response.is_done():
+                return
+                
             # Respond immediately to prevent interaction timeout
             await interaction.response.defer(ephemeral=True)
             
@@ -793,18 +894,21 @@ class ModListView(discord.ui.View):
         except Exception as e:
             print(f"Error in show_all_mods button: {e}")
             try:
-                await interaction.followup.send(f"❌ An error occurred: {str(e)}", ephemeral=True)
-            except:
-                # If followup fails, try to send a new response
-                try:
+                if not interaction.response.is_done():
                     await interaction.response.send_message(f"❌ An error occurred: {str(e)}", ephemeral=True)
-                except:
-                    pass
+                else:
+                    await interaction.followup.send(f"❌ An error occurred: {str(e)}", ephemeral=True)
+            except:
+                pass
     
     @discord.ui.button(label="⬇️ DOWNLOAD", style=discord.ButtonStyle.secondary, emoji="📥")
     async def download_modlist(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Download the original modlist HTML file"""
         try:
+            # Check if interaction is already responded to
+            if interaction.response.is_done():
+                return
+                
             # Get the bot instance and cast it properly
             bot = interaction.client
             if not isinstance(bot, ArmaModBot):
@@ -824,7 +928,47 @@ class ModListView(discord.ui.View):
         except Exception as e:
             print(f"Error in download_modlist button: {e}")
             try:
-                await interaction.response.send_message(f"❌ An error occurred: {str(e)}", ephemeral=True)
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(f"❌ An error occurred: {str(e)}", ephemeral=True)
+            except:
+                pass
+    
+    @discord.ui.button(label="LMB Alpha 0.3", style=discord.ButtonStyle.secondary)
+    async def github_link(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Link to GitHub repository"""
+        try:
+            # Check if interaction is already responded to
+            if interaction.response.is_done():
+                return
+                
+            embed = discord.Embed(
+                title="🔗 LoadmasterBot GitHub",
+                description="View the source code and contribute to the project!",
+                color=0x0099ff
+            )
+            embed.add_field(
+                name="📁 Repository",
+                value="[GitHub Repository](https://github.com/yourusername/loadmasterbot)",
+                inline=False
+            )
+            embed.add_field(
+                name="📋 Version",
+                value="**LMB Alpha 0.3**",
+                inline=False
+            )
+            embed.add_field(
+                name="🤝 Contributing",
+                value="Feel free to submit issues, feature requests, or pull requests!",
+                inline=False
+            )
+            
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            
+        except Exception as e:
+            print(f"Error in github_link button: {e}")
+            try:
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(f"❌ An error occurred: {str(e)}", ephemeral=True)
             except:
                 pass
 
