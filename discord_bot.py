@@ -29,8 +29,7 @@ class ArmaModBot(commands.Bot):
         # Store active mod lists for button interactions
         self.active_mod_lists = {}
         
-        # Track last mod list message per channel
-        self.last_modlist_message = {}
+        # Track last mod list analysis per channel (for comparison)
         self.last_modlist_analysis = {}
         
         # Start cleanup task for expired mod lists
@@ -64,7 +63,7 @@ class ArmaModBot(commands.Bot):
         print(f"Container ID: {os.getenv('RAILWAY_CONTAINER_ID', 'Unknown')}")
     
     async def cleanup_expired_mod_lists(self):
-        """Cleanup task to remove expired mod lists from memory"""
+        """Cleanup task to remove expired mod lists from memory and old database records"""
         while not self.is_closed():
             try:
                 current_time = time.time()
@@ -80,6 +79,9 @@ class ArmaModBot(commands.Bot):
                 
                 if expired_keys:
                     print(f"Cleaned up {len(expired_keys)} expired mod lists")
+                
+                # Clean up old bot messages from database (older than 24 hours)
+                self.database.cleanup_old_bot_messages(86400)  # 24 hours
                 
                 # Run cleanup every 5 minutes
                 await asyncio.sleep(300)
@@ -205,20 +207,37 @@ class ModCommands(commands.Cog):
             print("Mod list analysis completed successfully")
             analysis['modlist_attachment_url'] = attachment.url
 
-            # Delete previous mod list message in this channel
-            channel_id = message.channel.id
-            old_msg = self.bot.last_modlist_message.get(channel_id)
+            # Delete previous mod list messages in this channel
+            channel_id = str(message.channel.id)
+            old_messages = self.bot.database.get_bot_messages_for_channel(channel_id, "modlist")
             old_message_deleted = False
-            if old_msg:
+            
+            for old_msg_id, old_user_id in old_messages:
                 try:
-                    await old_msg.delete()
-                    old_message_deleted = True
-                except Exception:
-                    pass
+                    # Only delete messages from the same user or if it's the same channel
+                    if old_user_id == str(message.author.id):
+                        old_msg = await message.channel.fetch_message(int(old_msg_id))
+                        await old_msg.delete()
+                        old_message_deleted = True
+                        # Remove from database
+                        self.bot.database.delete_bot_message(old_msg_id)
+                except Exception as e:
+                    print(f"Could not delete old message {old_msg_id}: {e}")
+                    # Remove from database if message doesn't exist
+                    self.bot.database.delete_bot_message(old_msg_id)
 
             # Send the new analysis
             result_msg = await self.send_mod_analysis(message.channel, analysis, message.author)
-            self.bot.last_modlist_message[channel_id] = result_msg
+            
+            # Save the new message to database
+            self.bot.database.save_bot_message(
+                channel_id=str(message.channel.id),
+                message_id=str(result_msg.id),
+                user_id=str(message.author.id),
+                server_id=str(message.guild.id) if message.guild else "DM",
+                message_type="modlist"
+            )
+            
             self.bot.last_modlist_analysis[channel_id] = analysis
             await loading_msg.delete()
             
@@ -542,7 +561,8 @@ class ModCommands(commands.Cog):
                   "`/modlist` - Show basic help\n"
                   "`/bothelp` - Show detailed help (this command)\n"
                   "`/debug` - Debug bot functionality\n"
-                  "`/regen` - Regenerate buttons for recent mod list\n\n"
+                  "`/regen` - Regenerate buttons for recent mod list\n"
+                  "`/cleanup` - Clean up old bot messages (Admin only)\n\n"
                   "**Legacy Commands:**\n"
                   "`!modlist` - Show basic help\n"
                   "`!bothelp` - Show detailed help\n"
@@ -557,7 +577,7 @@ class ModCommands(commands.Cog):
             value="**After uploading a mod list:**\n"
                   "• **Show All Mods** button - Get complete list in private message\n"
                   "• **Download** button - Download original HTML file\n"
-                  "• **LMB Alpha 0.3** button - View GitHub repository\n"
+                  "• **LMB Alpha 0.4** button - View GitHub repository\n"
                   "• **Change tracking** - See what changed from last upload\n"
                   "• **CDLC warnings** - Get links to compatibility mods\n\n"
                   "**Button Timeout:** Buttons work for 15 minutes. Use `/regen` to get fresh buttons.",
@@ -785,7 +805,7 @@ class ModCommands(commands.Cog):
             name="📋 Available Actions",
             value="• **Show All Mods** - Get complete list in private message\n"
                   "• **Download** - Download original HTML file\n"
-                  "• **LMB Alpha 0.3** - View GitHub repository",
+                  "• **LMB Alpha 0.4** - View GitHub repository",
             inline=False
         )
         embed.add_field(
@@ -796,6 +816,44 @@ class ModCommands(commands.Cog):
         
         await interaction.followup.send(embed=embed, view=view, ephemeral=True)
     
+    @app_commands.command(name="cleanup", description="Clean up old bot messages (Admin only)")
+    async def cleanup_messages(self, interaction: discord.Interaction):
+        """Clean up old bot messages from the database"""
+        await interaction.response.defer(ephemeral=True)
+        
+        # Only allow admins in guilds, or the bot owner in DMs
+        is_admin = False
+        from discord import Member
+        if interaction.guild and isinstance(interaction.user, Member):
+            is_admin = interaction.user.guild_permissions.administrator
+        else:
+            is_admin = str(interaction.user.id) in ["YOUR_USER_ID_HERE"]  # Replace with your Discord ID
+        if not is_admin:
+            await interaction.followup.send("❌ You don't have permission to use this command.", ephemeral=True)
+            return
+        
+        try:
+            # Clean up old bot messages (older than 1 hour for testing)
+            self.bot.database.cleanup_old_bot_messages(3600)  # 1 hour
+            
+            embed = discord.Embed(
+                title="🧹 Cleanup Complete",
+                description="Old bot messages have been cleaned up from the database.",
+                color=0x00ff00
+            )
+            embed.add_field(
+                name="ℹ️ What was cleaned",
+                value="• Bot messages older than 1 hour\n"
+                      "• Expired mod list records\n"
+                      "• Orphaned database entries",
+                inline=False
+            )
+            
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            
+        except Exception as e:
+            await interaction.followup.send(f"❌ Error during cleanup: {str(e)}", ephemeral=True)
+
     # Legacy commands for backward compatibility
     @commands.command(name='modlist', aliases=['ml', 'mods'])
     async def modlist_legacy(self, ctx: commands.Context):
@@ -850,9 +908,40 @@ class ModListView(discord.ui.View):
                 await interaction.followup.send("❌ Bot configuration error - wrong bot type.", ephemeral=True)
                 return
                 
+            # Check if mod list exists and is not too old
             if self.list_id not in bot.active_mod_lists:
-                await interaction.followup.send("❌ Mod list has expired. Please upload again.", ephemeral=True)
-                return
+                # Try to find a recent mod list for this user and regenerate buttons
+                user_id = interaction.user.id
+                guild_id = interaction.guild.id if interaction.guild else None
+                
+                most_recent = None
+                most_recent_time = 0
+                
+                for list_id, data in bot.active_mod_lists.items():
+                    if (data.get('user_id') == user_id and 
+                        data.get('guild_id') == guild_id and
+                        data['timestamp'] > most_recent_time):
+                        most_recent = (list_id, data)
+                        most_recent_time = data['timestamp']
+                
+                if most_recent and (time.time() - most_recent_time) <= 86400:  # 24 hours
+                    # Found a recent mod list, regenerate buttons
+                    list_id, data = most_recent
+                    
+                    # Create new view with fresh buttons
+                    new_view = ModListView(list_id, len(data['mods']))
+                    
+                    regen_embed = discord.Embed(
+                        title="🔄 Buttons Regenerated",
+                        description="Your mod list buttons have been refreshed! You can now use all buttons for the next 15 minutes.",
+                        color=0x00ff00
+                    )
+                    
+                    await interaction.followup.send(embed=regen_embed, view=new_view, ephemeral=True)
+                    return
+                else:
+                    await interaction.followup.send("❌ No recent mod list found. Please upload a new mod list first.", ephemeral=True)
+                    return
             
             mods = bot.active_mod_lists[self.list_id]['mods']
             
@@ -915,9 +1004,40 @@ class ModListView(discord.ui.View):
                 await interaction.response.send_message("❌ Bot configuration error - wrong bot type.", ephemeral=True)
                 return
                 
+            # Check if mod list exists and is not too old
             if self.list_id not in bot.active_mod_lists:
-                await interaction.response.send_message("❌ Mod list has expired. Please upload again.", ephemeral=True)
-                return
+                # Try to find a recent mod list for this user and regenerate buttons
+                user_id = interaction.user.id
+                guild_id = interaction.guild.id if interaction.guild else None
+                
+                most_recent = None
+                most_recent_time = 0
+                
+                for list_id, data in bot.active_mod_lists.items():
+                    if (data.get('user_id') == user_id and 
+                        data.get('guild_id') == guild_id and
+                        data['timestamp'] > most_recent_time):
+                        most_recent = (list_id, data)
+                        most_recent_time = data['timestamp']
+                
+                if most_recent and (time.time() - most_recent_time) <= 86400:  # 24 hours
+                    # Found a recent mod list, regenerate buttons
+                    list_id, data = most_recent
+                    
+                    # Create new view with fresh buttons
+                    new_view = ModListView(list_id, len(data['mods']))
+                    
+                    regen_embed = discord.Embed(
+                        title="🔄 Buttons Regenerated",
+                        description="Your mod list buttons have been refreshed! You can now use all buttons for the next 15 minutes.",
+                        color=0x00ff00
+                    )
+                    
+                    await interaction.response.send_message(embed=regen_embed, view=new_view, ephemeral=True)
+                    return
+                else:
+                    await interaction.response.send_message("❌ No recent mod list found. Please upload a new mod list first.", ephemeral=True)
+                    return
             
             download_url = bot.active_mod_lists[self.list_id].get('download_url')
             if download_url:
@@ -933,7 +1053,7 @@ class ModListView(discord.ui.View):
             except:
                 pass
     
-    @discord.ui.button(label="LMB Alpha 0.3", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="LMB Alpha 0.4", style=discord.ButtonStyle.secondary)
     async def github_link(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Link to GitHub repository"""
         try:
@@ -948,12 +1068,12 @@ class ModListView(discord.ui.View):
             )
             embed.add_field(
                 name="📁 Repository",
-                value="[GitHub Repository](https://github.com/yourusername/loadmasterbot)",
+                value="[GitHub Repository](https://github.com/jfahler/loadmasterbot)",
                 inline=False
             )
             embed.add_field(
                 name="📋 Version",
-                value="**LMB Alpha 0.3**",
+                value="**LMB Alpha 0.4**",
                 inline=False
             )
             embed.add_field(

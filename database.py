@@ -44,6 +44,19 @@ class ModDatabase:
                 )
             ''')
             
+            # Table for storing bot message IDs for cleanup
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS bot_messages (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    channel_id TEXT,
+                    message_id TEXT,
+                    user_id TEXT,
+                    server_id TEXT,
+                    message_type TEXT,
+                    created_time INTEGER
+                )
+            ''')
+            
             conn.commit()
     
     def cache_mod_info(self, mod_id: str, mod_name: str, mod_size: Optional[float] = None):
@@ -124,6 +137,48 @@ class ModDatabase:
             
             result = cursor.fetchone()
             return result[0] if result else None
+    
+    def save_bot_message(self, channel_id: str, message_id: str, user_id: str, server_id: str, message_type: str = "modlist"):
+        """Save a bot message ID for later cleanup"""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO bot_messages (channel_id, message_id, user_id, server_id, message_type, created_time)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (channel_id, message_id, user_id, server_id, message_type, int(time.time())))
+            conn.commit()
+    
+    def get_bot_messages_for_channel(self, channel_id: str, message_type: str = "modlist") -> List[Tuple[str, str]]:
+        """Get bot message IDs for a specific channel and type"""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT message_id, user_id FROM bot_messages
+                WHERE channel_id = ? AND message_type = ?
+                ORDER BY created_time DESC
+            ''', (channel_id, message_type))
+            
+            return cursor.fetchall()
+    
+    def delete_bot_message(self, message_id: str):
+        """Delete a bot message record from the database"""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                DELETE FROM bot_messages WHERE message_id = ?
+            ''', (message_id,))
+            conn.commit()
+    
+    def cleanup_old_bot_messages(self, max_age: int = 86400):  # 24 hours default
+        """Clean up old bot message records"""
+        cutoff_time = int(time.time()) - max_age
+        
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                DELETE FROM bot_messages WHERE created_time < ?
+            ''', (cutoff_time,))
+            conn.commit()
     
     def cleanup_old_cache(self, max_age: int = 2592000):  # 30 days default
         """Clean up old cache entries"""
