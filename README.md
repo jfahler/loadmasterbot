@@ -19,9 +19,9 @@ A powerful Discord bot designed to help Arma 3 communities manage their mod list
 - **Smart Caching**: Caches mod information to reduce API calls and improve performance
 
 ### 🔧 CDLC Compatibility Checking
-- **CDLC Detection**: Automatically detects when CDLC mods are present in the mod list
-- **Potential CDLC Requirements**: Identifies mods that may require CDLC based on names, descriptions, and requirements
-- **Direct Steam Links**: Provides direct links to compatibility mods that work without purchasing CDLC
+- **Unified CDLC Display**: Shows all CDLC requirements in one clean section
+- **Status Indicators**: Clear ✅ (Detected) and ⚠️ (Required) indicators for each CDLC
+- **Smart Links**: Provides both CDLC store links and compatibility mod links as needed
 - **Supported CDLC**: Global Mobilization, S.O.G. Prairie Fire, CSLA Iron Curtain, Spearhead 1944, Western Sahara, Reaction Forces, Expeditionary Forces
 
 ### 📈 Change Tracking
@@ -107,7 +107,9 @@ A powerful Discord bot designed to help Arma 3 communities manage their mod list
 **Legacy Commands (Deprecated):**
 - `!modlist` - Show help information (use `/modlist` instead)
 - `!bothelp` - Show detailed bot help (use `/bothelp` instead)
-- `!help` - Show general Discord.py help
+- `!modsize_debug` - Debug mod sizes (use `/debug modsize` instead)
+- `!dlc_debug <mod_id>` - Debug DLC for specific mod (use `/debug dlc <mod_id>` instead)
+- `!changes_debug` - Debug change tracking (use `/debug changes` instead)
 
 ### 🧪 Testing the Bot
 
@@ -201,12 +203,13 @@ To find a Discord User ID:
 - "Show All Mods" button sends complete list to user's private messages
 - "Download" button provides original HTML file
 - Sorted by size (largest first) for better organization
+- Auto-deletes old mod list messages to keep channels clean
 
 ### CDLC Compatibility Checking
-- **Detected CDLC**: Shows when actual CDLC mods are present with compatibility mod links
-- **Potential Requirements**: Identifies mods that may require CDLC with helpful warnings
-- **Direct Links**: Provides links to compatibility mods that work without purchasing CDLC
-- **Clear Messaging**: User-friendly warnings about CDLC activation requirements
+- **Unified Display**: All CDLC requirements shown in one organized section
+- **Status Indicators**: ✅ (Detected) shows compatibility mod links, ⚠️ (Required) shows both CDLC and compatibility links
+- **Smart Organization**: CDLC sorted alphabetically with clear status and appropriate links
+- **User-Friendly**: Clear messaging about CDLC activation requirements
 
 ### Workshop Requirements
 - **Dependency Checking**: Verifies all required workshop items are included
