@@ -229,47 +229,62 @@ class ModCommands(commands.Cog):
         detected_cdlc = compat_info.get('detected_cdlc', [])
         mods_require_cdlc = compat_info.get('mods_require_cdlc', [])
         
-        # Handle CDLC detection
+        # Debug output
+        print(f"DEBUG - Detected CDLC: {detected_cdlc}")
+        print(f"DEBUG - Mods require CDLC: {mods_require_cdlc}")
+        
+        # Handle CDLC detection - unified approach
         if detected_cdlc or mods_require_cdlc:
-            compat_text = ""
+            from config import CDLC_COMPAT_MODS
             
-            # Check for detected CDLC
+            # Collect all unique CDLC requirements
+            all_cdlc_requirements = set()
             if detected_cdlc:
-                from config import CDLC_COMPAT_MODS
-                for cdlc_key, cdlc_info in CDLC_COMPAT_MODS.items():
-                    if cdlc_info['name'] in detected_cdlc:
-                        compat_text += f"**{cdlc_info['name']}**\n"
-                        compat_text += f"• [Compat Mod: {cdlc_info['compat_name']}]({cdlc_info['steam_url']})\n\n"
+                all_cdlc_requirements.update(detected_cdlc)
+            if mods_require_cdlc:
+                all_cdlc_requirements.update(mods_require_cdlc)
             
-            # Check for mods that may require CDLC
-            potential_cdlc = []
-            for cdlc_name in mods_require_cdlc:
-                if cdlc_name not in detected_cdlc:
-                    potential_cdlc.append(cdlc_name)
+            compat_text = "**Required CDLC and Compatibility Mods:**\n\n"
             
-            if potential_cdlc:
-                compat_text += "⚠️ **This modlist may require these CDLC:**\n\n"
+            # Process each CDLC requirement
+            for cdlc_name in sorted(all_cdlc_requirements):
+                # Find the CDLC info from config
+                cdlc_info = None
+                for cdlc_key, info in CDLC_COMPAT_MODS.items():
+                    if info['name'] == cdlc_name:
+                        cdlc_info = info
+                        break
                 
-                # Add links for each potential CDLC
-                for cdlc_name in potential_cdlc:
-                    for cdlc_key, cdlc_info in CDLC_COMPAT_MODS.items():
-                        if cdlc_info['name'] == cdlc_name:
-                            compat_text += f"• [{cdlc_name}]({cdlc_info['cdlc_url']})\n"
-                            break
-                compat_text += "\n***If you own the CDLC, remember to ***activate it*** before joining the server!***\n\n"
+                if cdlc_info:
+                    # Check if this CDLC is detected (has compat mod) or just required
+                    is_detected = cdlc_name in detected_cdlc
+                    
+                    if is_detected:
+                        # CDLC is detected - show compat mod link
+                        compat_text += f"✅ **{cdlc_name}** (Detected)\n"
+                        compat_text += f"• [Compatibility Mod]({cdlc_info['steam_url']})\n\n"
+                    else:
+                        # CDLC is required but not detected - show CDLC link
+                        compat_text += f"⚠️ **{cdlc_name}** (Required)\n"
+                        compat_text += f"• [CDLC Store Page]({cdlc_info['cdlc_url']})\n"
+                        compat_text += f"• [Compatibility Mod]({cdlc_info['steam_url']})\n\n"
+            
+            # Add reminder about activating CDLC
+            if any(cdlc_name not in detected_cdlc for cdlc_name in all_cdlc_requirements):
+                compat_text += "***If you own the CDLC, remember to ***activate it*** before joining the server!***\n\n"
             
             # Truncate if too long for Discord
             if len(compat_text) > 1024:
                 compat_text = compat_text[:1021] + "..."
             
             embed.add_field(
-                name="CDLC Required",
+                name="🎮 CDLC Requirements",
                 value=compat_text,
                 inline=False
             )
         else:
             embed.add_field(
-                name="CDLC Required",
+                name="🎮 CDLC Requirements",
                 value="No CDLC detected in your mod list.",
                 inline=False
             )
@@ -694,35 +709,47 @@ class ModListView(discord.ui.View):
     @discord.ui.button(label="📋 Show All Mods", style=discord.ButtonStyle.primary)
     async def show_all_mods(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Show all mods in a private message to the user"""
-        # Respond immediately to prevent interaction timeout
-        await interaction.response.defer(ephemeral=True)
-        
-        # Cast to ArmaModBot to access active_mod_lists
-        bot = interaction.client
-        if not isinstance(bot, ArmaModBot):
-            await interaction.followup.send("❌ Bot configuration error.", ephemeral=True)
-            return
+        try:
+            # Respond immediately to prevent interaction timeout
+            await interaction.response.defer(ephemeral=True)
             
-        if self.list_id not in bot.active_mod_lists:
-            await interaction.followup.send("❌ Mod list has expired. Please upload again.", ephemeral=True)
-            return
-        
-        mods = bot.active_mod_lists[self.list_id]['mods']
-        
-        # Create a comprehensive mod list
-        all_mods_text = "**Complete Mod List:**\n\n"
-        for i, mod in enumerate(mods, 1):
-            size_text = f" ({mod.get('size_gb', 'Unknown'):.1f}GB)" if mod.get('size_gb') else ""
-            all_mods_text += f"{i}. **{mod['name']}**{size_text}\n"
-            all_mods_text += f"   ID: {mod['id']} | [Steam Page]({mod['url']})\n\n"
-        
-        # Split if too long
-        if len(all_mods_text) > 2000:
-            chunks = [all_mods_text[i:i+1900] for i in range(0, len(all_mods_text), 1900)]
-            for i, chunk in enumerate(chunks):
+            # Get the bot instance and cast it properly
+            bot = interaction.client
+            if not isinstance(bot, ArmaModBot):
+                await interaction.followup.send("❌ Bot configuration error - wrong bot type.", ephemeral=True)
+                return
+                
+            if self.list_id not in bot.active_mod_lists:
+                await interaction.followup.send("❌ Mod list has expired. Please upload again.", ephemeral=True)
+                return
+            
+            mods = bot.active_mod_lists[self.list_id]['mods']
+            
+            # Create a comprehensive mod list
+            all_mods_text = "**Complete Mod List:**\n\n"
+            for i, mod in enumerate(mods, 1):
+                size_text = f" ({mod.get('size_gb', 'Unknown'):.1f}GB)" if mod.get('size_gb') else ""
+                all_mods_text += f"{i}. **{mod['name']}**{size_text}\n"
+                all_mods_text += f"   ID: {mod['id']} | [Steam Page]({mod['url']})\n\n"
+            
+            # Split if too long
+            if len(all_mods_text) > 2000:
+                chunks = [all_mods_text[i:i+1900] for i in range(0, len(all_mods_text), 1900)]
+                for i, chunk in enumerate(chunks):
+                    embed = discord.Embed(
+                        title=f"📋 Complete Mod List (Part {i+1}/{len(chunks)})",
+                        description=chunk,
+                        color=0x00ff00
+                    )
+                    try:
+                        await interaction.user.send(embed=embed)
+                    except discord.Forbidden:
+                        await interaction.followup.send("❌ I cannot send you a private message. Please check your privacy settings.", ephemeral=True)
+                        return
+            else:
                 embed = discord.Embed(
-                    title=f"📋 Complete Mod List (Part {i+1}/{len(chunks)})",
-                    description=chunk,
+                    title="📋 Complete Mod List",
+                    description=all_mods_text,
                     color=0x00ff00
                 )
                 try:
@@ -730,38 +757,46 @@ class ModListView(discord.ui.View):
                 except discord.Forbidden:
                     await interaction.followup.send("❌ I cannot send you a private message. Please check your privacy settings.", ephemeral=True)
                     return
-        else:
-            embed = discord.Embed(
-                title="📋 Complete Mod List",
-                description=all_mods_text,
-                color=0x00ff00
-            )
+            
+            await interaction.followup.send("✅ Complete mod list sent to your private messages!", ephemeral=True)
+            
+        except Exception as e:
+            print(f"Error in show_all_mods button: {e}")
             try:
-                await interaction.user.send(embed=embed)
-            except discord.Forbidden:
-                await interaction.followup.send("❌ I cannot send you a private message. Please check your privacy settings.", ephemeral=True)
-                return
-        
-        await interaction.followup.send("✅ Complete mod list sent to your private messages!", ephemeral=True)
+                await interaction.followup.send(f"❌ An error occurred: {str(e)}", ephemeral=True)
+            except:
+                # If followup fails, try to send a new response
+                try:
+                    await interaction.response.send_message(f"❌ An error occurred: {str(e)}", ephemeral=True)
+                except:
+                    pass
     
     @discord.ui.button(label="⬇️ DOWNLOAD", style=discord.ButtonStyle.secondary, emoji="📥")
     async def download_modlist(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Download the original modlist HTML file"""
-        # Cast to ArmaModBot to access active_mod_lists
-        bot = interaction.client
-        if not isinstance(bot, ArmaModBot):
-            await interaction.response.send_message("❌ Bot configuration error.", ephemeral=True)
-            return
+        try:
+            # Get the bot instance and cast it properly
+            bot = interaction.client
+            if not isinstance(bot, ArmaModBot):
+                await interaction.response.send_message("❌ Bot configuration error - wrong bot type.", ephemeral=True)
+                return
+                
+            if self.list_id not in bot.active_mod_lists:
+                await interaction.response.send_message("❌ Mod list has expired. Please upload again.", ephemeral=True)
+                return
             
-        if self.list_id not in bot.active_mod_lists:
-            await interaction.response.send_message("❌ Mod list has expired. Please upload again.", ephemeral=True)
-            return
-        
-        download_url = bot.active_mod_lists[self.list_id].get('download_url')
-        if download_url:
-            await interaction.response.send_message(f"📥 [Download your mod list HTML file]({download_url})", ephemeral=True)
-        else:
-            await interaction.response.send_message("❌ Download link not available.", ephemeral=True)
+            download_url = bot.active_mod_lists[self.list_id].get('download_url')
+            if download_url:
+                await interaction.response.send_message(f"📥 [Download your mod list HTML file]({download_url})", ephemeral=True)
+            else:
+                await interaction.response.send_message("❌ Download link not available.", ephemeral=True)
+                
+        except Exception as e:
+            print(f"Error in download_modlist button: {e}")
+            try:
+                await interaction.response.send_message(f"❌ An error occurred: {str(e)}", ephemeral=True)
+            except:
+                pass
 
 async def main():
     """Main function to run the bot"""
