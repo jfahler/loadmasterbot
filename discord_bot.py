@@ -39,6 +39,9 @@ class ArmaModBot(commands.Bot):
         """Setup hook for bot initialization"""
         await self.add_cog(ModCommands(self))
         
+        # Add persistent views for button functionality after restarts
+        self.add_view(ModListView("persistent", 0))
+        
         # Sync slash commands with Discord
         print("Syncing slash commands...")
         try:
@@ -562,6 +565,8 @@ class ModCommands(commands.Cog):
                   "`/bothelp` - Show detailed help (this command)\n"
                   "`/debug` - Debug bot functionality\n"
                   "`/regen` - Regenerate buttons for recent mod list\n"
+                  "`/showmods` - Show complete mod list (no timeout)\n"
+                  "`/download` - Get download link (no timeout)\n"
                   "`/cleanup` - Clean up old bot messages (Admin only)\n\n"
                   "**Legacy Commands:**\n"
                   "`!modlist` - Show basic help\n"
@@ -577,10 +582,11 @@ class ModCommands(commands.Cog):
             value="**After uploading a mod list:**\n"
                   "• **Show All Mods** button - Get complete list in private message\n"
                   "• **Download** button - Download original HTML file\n"
-                  "• **LMB Alpha 0.4** button - View GitHub repository\n"
+                  "• **LMB Alpha 0.5** button - View GitHub repository\n"
                   "• **Change tracking** - See what changed from last upload\n"
                   "• **CDLC warnings** - Get links to compatibility mods\n\n"
-                  "**Button Timeout:** Buttons work for 15 minutes. Use `/regen` to get fresh buttons.",
+                  "**Persistent Buttons:** Buttons work permanently (no timeout).\n"
+                  "**Alternative Commands:** Use `/showmods` and `/download` as backup.",
             inline=False
         )
         
@@ -763,9 +769,9 @@ class ModCommands(commands.Cog):
         
         await interaction.followup.send(embed=embed, ephemeral=True)
     
-    @app_commands.command(name="regen", description="Regenerate buttons for your recent mod list")
+    @app_commands.command(name="regen", description="Get fresh buttons for your recent mod list")
     async def regen_buttons(self, interaction: discord.Interaction):
-        """Regenerate buttons for a recent mod list"""
+        """Get fresh buttons for a recent mod list"""
         await interaction.response.defer(ephemeral=True)
         
         user_id = interaction.user.id
@@ -810,7 +816,7 @@ class ModCommands(commands.Cog):
         )
         embed.add_field(
             name="⏰ Button Lifetime",
-            value="These buttons will work for the next 15 minutes.",
+            value="These buttons will work permanently (no timeout).",
             inline=False
         )
         
@@ -854,6 +860,109 @@ class ModCommands(commands.Cog):
         except Exception as e:
             await interaction.followup.send(f"❌ Error during cleanup: {str(e)}", ephemeral=True)
 
+    @app_commands.command(name="showmods", description="Show your complete mod list from recent upload")
+    async def show_mods_command(self, interaction: discord.Interaction):
+        """Show complete mod list via command (no button timeout)"""
+        await interaction.response.defer(ephemeral=True)
+        
+        user_id = interaction.user.id
+        guild_id = interaction.guild.id if interaction.guild else None
+        
+        # Find the most recent mod list for this user
+        most_recent = None
+        most_recent_time = 0
+        
+        for list_id, data in self.bot.active_mod_lists.items():
+            if (data.get('user_id') == user_id and 
+                data.get('guild_id') == guild_id and
+                data['timestamp'] > most_recent_time):
+                most_recent = (list_id, data)
+                most_recent_time = data['timestamp']
+        
+        if not most_recent:
+            await interaction.followup.send("❌ No recent mod list found. Please upload a new mod list first.", ephemeral=True)
+            return
+        
+        list_id, data = most_recent
+        
+        # Check if the mod list is too old (more than 24 hours)
+        if time.time() - data['timestamp'] > 86400:  # 24 hours
+            await interaction.followup.send("❌ Your mod list is too old (more than 24 hours). Please upload a new one.", ephemeral=True)
+            return
+        
+        mods = data['mods']
+        
+        # Create a comprehensive mod list
+        all_mods_text = "**Complete Mod List:**\n\n"
+        for i, mod in enumerate(mods, 1):
+            size_text = f" ({mod.get('size_gb', 'Unknown'):.1f}GB)" if mod.get('size_gb') else ""
+            all_mods_text += f"{i}. **{mod['name']}**{size_text}\n"
+            all_mods_text += f"   ID: {mod['id']} | [Steam Page]({mod['url']})\n\n"
+        
+        # Split if too long
+        if len(all_mods_text) > 2000:
+            chunks = [all_mods_text[i:i+1900] for i in range(0, len(all_mods_text), 1900)]
+            for i, chunk in enumerate(chunks):
+                embed = discord.Embed(
+                    title=f"📋 Complete Mod List (Part {i+1}/{len(chunks)})",
+                    description=chunk,
+                    color=0x00ff00
+                )
+                try:
+                    await interaction.user.send(embed=embed)
+                except discord.Forbidden:
+                    await interaction.followup.send("❌ I cannot send you a private message. Please check your privacy settings.", ephemeral=True)
+                    return
+        else:
+            embed = discord.Embed(
+                title="📋 Complete Mod List",
+                description=all_mods_text,
+                color=0x00ff00
+            )
+            try:
+                await interaction.user.send(embed=embed)
+            except discord.Forbidden:
+                await interaction.followup.send("❌ I cannot send you a private message. Please check your privacy settings.", ephemeral=True)
+                return
+        
+        await interaction.followup.send("✅ Complete mod list sent to your private messages!", ephemeral=True)
+
+    @app_commands.command(name="download", description="Get download link for your recent mod list")
+    async def download_command(self, interaction: discord.Interaction):
+        """Get download link via command (no button timeout)"""
+        await interaction.response.defer(ephemeral=True)
+        
+        user_id = interaction.user.id
+        guild_id = interaction.guild.id if interaction.guild else None
+        
+        # Find the most recent mod list for this user
+        most_recent = None
+        most_recent_time = 0
+        
+        for list_id, data in self.bot.active_mod_lists.items():
+            if (data.get('user_id') == user_id and 
+                data.get('guild_id') == guild_id and
+                data['timestamp'] > most_recent_time):
+                most_recent = (list_id, data)
+                most_recent_time = data['timestamp']
+        
+        if not most_recent:
+            await interaction.followup.send("❌ No recent mod list found. Please upload a new mod list first.", ephemeral=True)
+            return
+        
+        list_id, data = most_recent
+        
+        # Check if the mod list is too old (more than 24 hours)
+        if time.time() - data['timestamp'] > 86400:  # 24 hours
+            await interaction.followup.send("❌ Your mod list is too old (more than 24 hours). Please upload a new one.", ephemeral=True)
+            return
+        
+        download_url = data.get('download_url')
+        if download_url:
+            await interaction.followup.send(f"📥 [Download your mod list HTML file]({download_url})", ephemeral=True)
+        else:
+            await interaction.followup.send("❌ Download link not available.", ephemeral=True)
+
     # Legacy commands for backward compatibility
     @commands.command(name='modlist', aliases=['ml', 'mods'])
     async def modlist_legacy(self, ctx: commands.Context):
@@ -885,13 +994,14 @@ class ModCommands(commands.Cog):
 
 class ModListView(discord.ui.View):
     def __init__(self, list_id: str, total_mods: int):
-        super().__init__(timeout=900)  # 15 minute timeout (Discord's limit)
+        super().__init__(timeout=None)  # No timeout - persistent view
         self.list_id = list_id
         self.total_mods = total_mods
         self.current_page = 0
         self.mods_per_page = 10
     
-    @discord.ui.button(label="📋 Show All Mods", style=discord.ButtonStyle.primary)
+    # Add custom_id for persistent views
+    @discord.ui.button(label="📋 Show All Mods", style=discord.ButtonStyle.primary, custom_id="show_all_mods")
     async def show_all_mods(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Show all mods in a private message to the user"""
         try:
@@ -907,10 +1017,13 @@ class ModListView(discord.ui.View):
             if not isinstance(bot, ArmaModBot):
                 await interaction.followup.send("❌ Bot configuration error - wrong bot type.", ephemeral=True)
                 return
-                
-            # Check if mod list exists and is not too old
-            if self.list_id not in bot.active_mod_lists:
-                # Try to find a recent mod list for this user and regenerate buttons
+            
+            # Try to get mod list from active lists first
+            mods = None
+            if self.list_id in bot.active_mod_lists:
+                mods = bot.active_mod_lists[self.list_id]['mods']
+            else:
+                # Try to find a recent mod list for this user
                 user_id = interaction.user.id
                 guild_id = interaction.guild.id if interaction.guild else None
                 
@@ -925,25 +1038,14 @@ class ModListView(discord.ui.View):
                         most_recent_time = data['timestamp']
                 
                 if most_recent and (time.time() - most_recent_time) <= 86400:  # 24 hours
-                    # Found a recent mod list, regenerate buttons
-                    list_id, data = most_recent
-                    
-                    # Create new view with fresh buttons
-                    new_view = ModListView(list_id, len(data['mods']))
-                    
-                    regen_embed = discord.Embed(
-                        title="🔄 Buttons Regenerated",
-                        description="Your mod list buttons have been refreshed! You can now use all buttons for the next 15 minutes.",
-                        color=0x00ff00
-                    )
-                    
-                    await interaction.followup.send(embed=regen_embed, view=new_view, ephemeral=True)
-                    return
+                    mods = most_recent[1]['mods']
                 else:
                     await interaction.followup.send("❌ No recent mod list found. Please upload a new mod list first.", ephemeral=True)
                     return
             
-            mods = bot.active_mod_lists[self.list_id]['mods']
+            if not mods:
+                await interaction.followup.send("❌ Mod list not found. Please upload a new mod list first.", ephemeral=True)
+                return
             
             # Create a comprehensive mod list
             all_mods_text = "**Complete Mod List:**\n\n"
@@ -990,7 +1092,7 @@ class ModListView(discord.ui.View):
             except:
                 pass
     
-    @discord.ui.button(label="⬇️ DOWNLOAD", style=discord.ButtonStyle.secondary, emoji="📥")
+    @discord.ui.button(label="⬇️ DOWNLOAD", style=discord.ButtonStyle.secondary, emoji="📥", custom_id="download_modlist")
     async def download_modlist(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Download the original modlist HTML file"""
         try:
@@ -1003,10 +1105,13 @@ class ModListView(discord.ui.View):
             if not isinstance(bot, ArmaModBot):
                 await interaction.response.send_message("❌ Bot configuration error - wrong bot type.", ephemeral=True)
                 return
-                
-            # Check if mod list exists and is not too old
-            if self.list_id not in bot.active_mod_lists:
-                # Try to find a recent mod list for this user and regenerate buttons
+            
+            # Try to get mod list from active lists first
+            download_url = None
+            if self.list_id in bot.active_mod_lists:
+                download_url = bot.active_mod_lists[self.list_id].get('download_url')
+            else:
+                # Try to find a recent mod list for this user
                 user_id = interaction.user.id
                 guild_id = interaction.guild.id if interaction.guild else None
                 
@@ -1021,29 +1126,12 @@ class ModListView(discord.ui.View):
                         most_recent_time = data['timestamp']
                 
                 if most_recent and (time.time() - most_recent_time) <= 86400:  # 24 hours
-                    # Found a recent mod list, regenerate buttons
-                    list_id, data = most_recent
-                    
-                    # Create new view with fresh buttons
-                    new_view = ModListView(list_id, len(data['mods']))
-                    
-                    regen_embed = discord.Embed(
-                        title="🔄 Buttons Regenerated",
-                        description="Your mod list buttons have been refreshed! You can now use all buttons for the next 15 minutes.",
-                        color=0x00ff00
-                    )
-                    
-                    await interaction.response.send_message(embed=regen_embed, view=new_view, ephemeral=True)
-                    return
-                else:
-                    await interaction.response.send_message("❌ No recent mod list found. Please upload a new mod list first.", ephemeral=True)
-                    return
+                    download_url = most_recent[1].get('download_url')
             
-            download_url = bot.active_mod_lists[self.list_id].get('download_url')
             if download_url:
                 await interaction.response.send_message(f"📥 [Download your mod list HTML file]({download_url})", ephemeral=True)
             else:
-                await interaction.response.send_message("❌ Download link not available.", ephemeral=True)
+                await interaction.response.send_message("❌ Download link not available. Please upload a new mod list first.", ephemeral=True)
                 
         except Exception as e:
             print(f"Error in download_modlist button: {e}")
@@ -1053,7 +1141,7 @@ class ModListView(discord.ui.View):
             except:
                 pass
     
-    @discord.ui.button(label="LMB Alpha 0.4", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="LMB Alpha 0.4", style=discord.ButtonStyle.secondary, custom_id="github_link")
     async def github_link(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Link to GitHub repository"""
         try:
