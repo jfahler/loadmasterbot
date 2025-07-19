@@ -44,6 +44,12 @@ A powerful Discord bot designed to help Arma 3 communities manage their mod list
 
 ### Installation
 
+The bot can either be run on a server or via a service like <a href="http://www.railway.app/">Railway.app</a> for easier deployment. 
+
+To run it on Railway or other similar services, link this GH repository to your dashboard. 
+
+To run the app from a server, do the following:
+
 1. **Clone the repository**
    ```bash
    git clone <repository-url>
