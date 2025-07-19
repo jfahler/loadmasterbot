@@ -582,7 +582,7 @@ class ModCommands(commands.Cog):
             value="**After uploading a mod list:**\n"
                   "• **Show All Mods** button - Get complete list in private message\n"
                   "• **Download** button - Download original HTML file\n"
-                  "• **LMB Alpha 0.5** button - View GitHub repository\n"
+                  "• **LMB Alpha 0.5.1** button - View GitHub repository\n"
                   "• **Change tracking** - See what changed from last upload\n"
                   "• **CDLC warnings** - Get links to compatibility mods\n\n"
                   "**Persistent Buttons:** Buttons work permanently (no timeout).\n"
@@ -811,7 +811,7 @@ class ModCommands(commands.Cog):
             name="📋 Available Actions",
             value="• **Show All Mods** - Get complete list in private message\n"
                   "• **Download** - Download original HTML file\n"
-                  "• **LMB Alpha 0.4** - View GitHub repository",
+                  "• **LMB Alpha 0.5.1** - View GitHub repository",
             inline=False
         )
         embed.add_field(
@@ -1141,7 +1141,7 @@ class ModListView(discord.ui.View):
             except:
                 pass
     
-    @discord.ui.button(label="LMB Alpha 0.4", style=discord.ButtonStyle.secondary, custom_id="github_link")
+    @discord.ui.button(label="LMB Alpha 0.5.1", style=discord.ButtonStyle.secondary, custom_id="github_link")
     async def github_link(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Link to GitHub repository"""
         try:
@@ -1161,7 +1161,7 @@ class ModListView(discord.ui.View):
             )
             embed.add_field(
                 name="📋 Version",
-                value="**LMB Alpha 0.4**",
+                value="**LMB Alpha 0.5.1**",
                 inline=False
             )
             embed.add_field(
