@@ -57,6 +57,18 @@ class ModDatabase:
                 )
             ''')
             
+            # Table for storing active mod lists
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS active_mod_lists (
+                    list_id TEXT PRIMARY KEY,
+                    user_id TEXT,
+                    guild_id TEXT,
+                    mods TEXT,
+                    download_url TEXT,
+                    timestamp INTEGER
+                )
+            ''')
+            
             conn.commit()
     
     def cache_mod_info(self, mod_id: str, mod_name: str, mod_size: Optional[float] = None):
@@ -192,4 +204,95 @@ class ModDatabase:
             cursor.execute('''
                 DELETE FROM mod_sizes WHERE last_updated < ?
             ''', (cutoff_time,))
-            conn.commit() 
+            conn.commit()
+    
+    def save_active_mod_list(self, list_id: str, user_id: int, guild_id: Optional[int], mods: List[Dict], download_url: Optional[str]):
+        """Save an active mod list to the database"""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT OR REPLACE INTO active_mod_lists 
+                (list_id, user_id, guild_id, mods, download_url, timestamp)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (
+                list_id,
+                str(user_id),
+                str(guild_id) if guild_id else None,
+                json.dumps(mods),
+                download_url,
+                int(time.time())
+            ))
+            conn.commit()
+    
+    def get_active_mod_list(self, list_id: str) -> Optional[Dict]:
+        """Get an active mod list from the database"""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT user_id, guild_id, mods, download_url, timestamp
+                FROM active_mod_lists
+                WHERE list_id = ?
+            ''', (list_id,))
+            
+            result = cursor.fetchone()
+            if result:
+                return {
+                    'user_id': int(result[0]),
+                    'guild_id': int(result[1]) if result[1] else None,
+                    'mods': json.loads(result[2]),
+                    'download_url': result[3],
+                    'timestamp': result[4]
+                }
+            return None
+    
+    def get_recent_mod_list(self, user_id: int, guild_id: Optional[int]) -> Optional[Tuple[str, Dict]]:
+        """Get the most recent mod list for a user in a guild"""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT list_id, user_id, guild_id, mods, download_url, timestamp
+                FROM active_mod_lists
+                WHERE user_id = ? AND (guild_id = ? OR guild_id IS NULL)
+                ORDER BY timestamp DESC
+                LIMIT 1
+            ''', (str(user_id), str(guild_id) if guild_id else None))
+            
+            result = cursor.fetchone()
+            if result:
+                return (result[0], {
+                    'user_id': int(result[1]),
+                    'guild_id': int(result[2]) if result[2] else None,
+                    'mods': json.loads(result[3]),
+                    'download_url': result[4],
+                    'timestamp': result[5]
+                })
+            return None
+    
+    def cleanup_old_mod_lists(self, max_age: int = 86400):  # 24 hours default
+        """Clean up old mod lists"""
+        cutoff_time = int(time.time()) - max_age
+        
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                DELETE FROM active_mod_lists WHERE timestamp < ?
+            ''', (cutoff_time,))
+            conn.commit()
+    
+    def refresh_mod_list(self, list_id: str) -> bool:
+        """Refresh the timestamp of a mod list to keep it active"""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            # First check if the mod list exists
+            cursor.execute('SELECT COUNT(*) FROM active_mod_lists WHERE list_id = ?', (list_id,))
+            if cursor.fetchone()[0] == 0:
+                return False
+                
+            # Update the timestamp
+            cursor.execute('''
+                UPDATE active_mod_lists
+                SET timestamp = ?
+                WHERE list_id = ?
+            ''', (int(time.time()), list_id))
+            conn.commit()
+            return True

@@ -26,13 +26,10 @@ class ArmaModBot(commands.Bot):
         self.steam_api = SteamWorkshopAPI()
         self.analyzer = ModAnalyzer(self.steam_api, self.database)
         
-        # Store active mod lists for button interactions
-        self.active_mod_lists = {}
-        
         # Track last mod list analysis per channel (for comparison)
         self.last_modlist_analysis = {}
         
-        # Start cleanup task for expired mod lists
+        # Start cleanup task for expired data
         self.cleanup_task = None
     
     async def setup_hook(self):
@@ -66,25 +63,17 @@ class ArmaModBot(commands.Bot):
         print(f"Container ID: {os.getenv('RAILWAY_CONTAINER_ID', 'Unknown')}")
     
     async def cleanup_expired_mod_lists(self):
-        """Cleanup task to remove expired mod lists from memory and old database records"""
+        """Cleanup task to remove expired data from database"""
         while not self.is_closed():
             try:
-                current_time = time.time()
-                expired_keys = []
-                
-                for list_id, data in self.active_mod_lists.items():
-                    # Remove mod lists older than 20 minutes (1200 seconds)
-                    if current_time - data['timestamp'] > 1200:
-                        expired_keys.append(list_id)
-                
-                for key in expired_keys:
-                    del self.active_mod_lists[key]
-                
-                if expired_keys:
-                    print(f"Cleaned up {len(expired_keys)} expired mod lists")
+                # Clean up old mod lists (older than 24 hours)
+                self.database.cleanup_old_mod_lists(86400)  # 24 hours
                 
                 # Clean up old bot messages from database (older than 24 hours)
                 self.database.cleanup_old_bot_messages(86400)  # 24 hours
+                
+                # Clean up old cache (older than 30 days)
+                self.database.cleanup_old_cache(2592000)  # 30 days
                 
                 # Run cleanup every 5 minutes
                 await asyncio.sleep(300)
@@ -499,15 +488,15 @@ class ModCommands(commands.Cog):
             inline=False
         )
 
-        # Store mod list for button interactions
+        # Store mod list in database for button interactions
         list_id = f"{user.id}_{int(time.time())}"
-        self.bot.active_mod_lists[list_id] = {
-            'mods': mod_display['all_mods'],
-            'timestamp': time.time(),
-            'download_url': analysis.get('modlist_attachment_url'),
-            'user_id': user.id,
-            'guild_id': channel.guild.id if channel.guild else None
-        }
+        self.bot.database.save_active_mod_list(
+            list_id=list_id,
+            user_id=user.id,
+            guild_id=channel.guild.id if channel.guild else None,
+            mods=mod_display['all_mods'],
+            download_url=analysis.get('modlist_attachment_url')
+        )
 
         # Create view with buttons
         view = ModListView(list_id, mod_display['total_mods'])
@@ -1018,29 +1007,32 @@ class ModListView(discord.ui.View):
                 await interaction.followup.send("❌ Bot configuration error - wrong bot type.", ephemeral=True)
                 return
             
-            # Try to get mod list from active lists first
+            # Try to get mod list from database first
+            data = bot.database.get_active_mod_list(self.list_id)
             mods = None
-            if self.list_id in bot.active_mod_lists:
-                mods = bot.active_mod_lists[self.list_id]['mods']
+            
+            if data:
+                # If the list exists but is old, try to refresh it
+                if (time.time() - data['timestamp']) > 86400:  # older than 24 hours
+                    if bot.database.refresh_mod_list(self.list_id):
+                        # Successfully refreshed, get the data again
+                        data = bot.database.get_active_mod_list(self.list_id)
+                mods = data['mods']
             else:
                 # Try to find a recent mod list for this user
                 user_id = interaction.user.id
                 guild_id = interaction.guild.id if interaction.guild else None
+                recent = bot.database.get_recent_mod_list(user_id, guild_id)
                 
-                most_recent = None
-                most_recent_time = 0
-                
-                for list_id, data in bot.active_mod_lists.items():
-                    if (data.get('user_id') == user_id and 
-                        data.get('guild_id') == guild_id and
-                        data['timestamp'] > most_recent_time):
-                        most_recent = (list_id, data)
-                        most_recent_time = data['timestamp']
-                
-                if most_recent and (time.time() - most_recent_time) <= 86400:  # 24 hours
-                    mods = most_recent[1]['mods']
+                if recent:
+                    # If found a recent list but it's old, try to refresh it
+                    if (time.time() - recent[1]['timestamp']) > 86400:
+                        if bot.database.refresh_mod_list(recent[0]):
+                            # Successfully refreshed, get the data again
+                            recent = bot.database.get_recent_mod_list(user_id, guild_id)
+                    mods = recent[1]['mods']
                 else:
-                    await interaction.followup.send("❌ No recent mod list found. Please upload a new mod list first.", ephemeral=True)
+                    await interaction.followup.send("❌ No mod list found. Please upload a new mod list first.", ephemeral=True)
                     return
             
             if not mods:
@@ -1106,27 +1098,30 @@ class ModListView(discord.ui.View):
                 await interaction.response.send_message("❌ Bot configuration error - wrong bot type.", ephemeral=True)
                 return
             
-            # Try to get mod list from active lists first
+            # Try to get mod list from database first
+            data = bot.database.get_active_mod_list(self.list_id)
             download_url = None
-            if self.list_id in bot.active_mod_lists:
-                download_url = bot.active_mod_lists[self.list_id].get('download_url')
+            
+            if data:
+                # If the list exists but is old, try to refresh it
+                if (time.time() - data['timestamp']) > 86400:  # older than 24 hours
+                    if bot.database.refresh_mod_list(self.list_id):
+                        # Successfully refreshed, get the data again
+                        data = bot.database.get_active_mod_list(self.list_id)
+                download_url = data.get('download_url')
             else:
                 # Try to find a recent mod list for this user
                 user_id = interaction.user.id
                 guild_id = interaction.guild.id if interaction.guild else None
+                recent = bot.database.get_recent_mod_list(user_id, guild_id)
                 
-                most_recent = None
-                most_recent_time = 0
-                
-                for list_id, data in bot.active_mod_lists.items():
-                    if (data.get('user_id') == user_id and 
-                        data.get('guild_id') == guild_id and
-                        data['timestamp'] > most_recent_time):
-                        most_recent = (list_id, data)
-                        most_recent_time = data['timestamp']
-                
-                if most_recent and (time.time() - most_recent_time) <= 86400:  # 24 hours
-                    download_url = most_recent[1].get('download_url')
+                if recent:
+                    # If found a recent list but it's old, try to refresh it
+                    if (time.time() - recent[1]['timestamp']) > 86400:
+                        if bot.database.refresh_mod_list(recent[0]):
+                            # Successfully refreshed, get the data again
+                            recent = bot.database.get_recent_mod_list(user_id, guild_id)
+                    download_url = recent[1].get('download_url')
             
             if download_url:
                 await interaction.response.send_message(f"📥 [Download your mod list HTML file]({download_url})", ephemeral=True)
