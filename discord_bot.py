@@ -1156,7 +1156,7 @@ class ModListView(discord.ui.View):
             )
             embed.add_field(
                 name="📋 Version",
-                value="**LMB Alpha 0.5.1**",
+                value="**LMB Alpha 0.6**",
                 inline=False
             )
             embed.add_field(
