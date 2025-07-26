@@ -1136,7 +1136,7 @@ class ModListView(discord.ui.View):
             except:
                 pass
     
-    @discord.ui.button(label="LMB Alpha 0.5.1", style=discord.ButtonStyle.secondary, custom_id="github_link")
+    @discord.ui.button(label="LMB Alpha 0.6", style=discord.ButtonStyle.secondary, custom_id="github_link")
     async def github_link(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Link to GitHub repository"""
         try:
