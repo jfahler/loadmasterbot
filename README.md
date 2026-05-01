@@ -2,7 +2,7 @@
 
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Last Commit](https://img.shields.io/github/last-commit/yourusername/loadmasterbot)](https://github.com/yourusername/loadmasterbot/commits/main)
+[![Last Commit](https://img.shields.io/github/last-commit/jfahler/loadmasterbot)](https://github.com/yourusername/loadmasterbot/commits/main)
 [![Discord.py](https://img.shields.io/badge/Discord.py-2.0+-blue.svg)](https://discordpy.readthedocs.io/)
 [![Arma 3](https://img.shields.io/badge/Arma%203-Mod%20Manager-green.svg)](https://arma3.com/)
 
